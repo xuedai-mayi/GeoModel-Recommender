@@ -1,5 +1,7 @@
 # GeoModel Recommender
 
+[中文](README.md) | [English](README.en.md)
+
 GeoModel Recommender 是面向地理模型的需求驱动推荐引擎，结合混合检索与能力证据匹配，根据研究任务、分析对象、目标输出和已有数据推荐模型。
 
 支持单模型推荐、多步骤分析流程规划和带来源引用的推荐解释。
