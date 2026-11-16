@@ -1,33 +1,33 @@
 # GeoModel Recommender
 
-[中文](README.md) | [English](README.en.md)
+[English](README.md) | [中文](README.zh-CN.md)
 
-GeoModel Recommender 是面向地理模型的需求驱动推荐引擎，结合混合检索与能力证据匹配，根据研究任务、分析对象、目标输出和已有数据推荐模型。
+GeoModel Recommender recommends geographic models based on research tasks, analysis objects, required outputs, and available data. It combines hybrid retrieval with checks against documented model capabilities.
 
-支持单模型推荐、多步骤分析流程规划和带来源引用的推荐解释。
+It supports individual model recommendations, planning for analysis workflows with multiple steps, and recommendation explanations with source citations.
 
-## 推荐流程
+## Recommendation pipeline
 
 ```text
-研究需求 → 需求解析 → 名称 BM25 / 正文 BM25 / 向量检索
-                     ↓
-                 RRF 排名融合
-                     ↓
-            功能证据、输入输出和条件核对
-                     ↓
-            候选分组、排序与冲突诊断
+Research request → Requirement parsing → Name BM25 / Body BM25 / Vector search
+                                             ↓
+                                     RRF rank fusion
+                                             ↓
+                       Capability evidence, I/O, and condition checks
+                                             ↓
+                          Candidate grouping, ranking, and diagnostics
 ```
 
-引擎将复杂需求拆成多个分析步骤，为各步骤选择模型并检查输入输出衔接。RAG 模块生成推荐解释，并核对引用是否来自对应候选的原文。
+For complex requests, the engine generates analysis steps, selects models for each step, and checks the connections between their inputs and outputs. The RAG module generates explanations and verifies each citation against the corresponding candidate's source text.
 
-- 三路检索各取最多 50 个候选，推荐引擎融合召回最多 40 个。
-- 候选先按证据状态分组，再结合需求中明确指定的模型名、用户偏好和检索分数排序。
-- 功能核对依据能力档案中的任务、对象、输出、输入条件及原文证据。检索相关性用于召回，接口声明作为待核验资料。
-- 输出包括候选模型、条件缺口、冲突诊断和分析流程，供后续建模使用。
+- Each retrieval channel returns up to 50 candidates. The recommendation engine uses up to 40 candidates after fusion.
+- Candidates are grouped by evidence status, then ranked using explicitly requested model names, user preferences, and retrieval scores.
+- Capability checks use documented tasks, analysis objects, outputs, input conditions, and source evidence. Retrieval relevance guides candidate selection; interface declarations are treated as material awaiting review.
+- Results include candidate models, unmet conditions, conflict diagnostics, and analysis workflows for subsequent modeling work.
 
-## 运行环境
+## Setup
 
-本地验证环境为 Python 3.12，核心依赖版本如下：
+The locally verified environment uses Python 3.12 and the following dependency versions:
 
 ```bash
 git clone https://github.com/xuedai-mayi/GeoModel-Recommender.git
@@ -35,11 +35,11 @@ cd GeoModel-Recommender
 python -m pip install numpy==2.5.4 bm25s==0.3.16 haystack-ai==3.4.1 pydantic==2.14.3
 ```
 
-在仓库根目录运行调用代码，通过 `recommendation` 包导入算法接口。
+Run your code from the repository root and import the API from `recommendation`.
 
-## 最小调用示例
+## Minimal example
 
-以下示例使用构造的模型记录和二维向量演示调用流程。实际使用时，用同一个嵌入模型生成文档向量和查询向量，并替换示例中的 `embed_query` 函数。
+This example uses synthetic model records and two-dimensional vectors to demonstrate the API. For actual retrieval, generate document and query vectors with the same embedding model and replace `embed_query` with that model's encoder. The sample request asks in Chinese for flood simulation with water depth as the output.
 
 ```python
 from recommendation import Intent, build_engine
@@ -67,7 +67,7 @@ records = [
 embeddings = [[1.0, 0.0], [0.0, 1.0]]
 
 def embed_query(text):
-    # 演示占位函数；实际使用时替换为同一嵌入模型的编码函数。
+    # Demo placeholder; replace with the encoder used for document vectors.
     return [1.0, 0.0]
 
 engine = build_engine(records, embeddings, embed_query)
@@ -84,43 +84,43 @@ for item in result["items"]:
     print(item["name"], item["match"]["status"])
 ```
 
-示例中的候选返回 `needs_review`，表示需要补充已核验能力档案。`tier` 保存模型元数据，功能核验结果见 `match.status`。
+The candidates in this example return `needs_review`, indicating that reviewed capability profiles are needed. `tier` stores model metadata; `match.status` reports the result of capability checks.
 
-## 输入与结果
+## Inputs and results
 
-入口函数：
+Build an engine with:
 
 ```python
 build_engine(records, embeddings, embed_query, *, applications=(), capabilities=())
 ```
 
-| 参数 | 格式与要求 |
+| Parameter | Format and requirements |
 | --- | --- |
-| `records` | 非空模型记录序列；`model_id`、`name`、`text`、`tier`、`url` 均为非空字符串，ID 唯一 |
-| `embeddings` | `N × D` 数值数组，与记录顺序一致；每行必须为有限、非零向量 |
-| `embed_query` | 接收查询字符串，返回同一向量空间中的 `D` 维有限、非零向量 |
-| `applications` | 可选应用记录，包含 `id`、`relatedModelItems` 和原始 `mdl` 声明等字段 |
-| `capabilities` | 可选能力档案，遵循 [Capability](recommendation/schemas.py) 定义 |
+| `records` | A nonempty sequence of model records. `model_id`, `name`, `text`, `tier`, and `url` must be nonempty strings, with unique model IDs. |
+| `embeddings` | An `N × D` numeric array in the same order as the records. Each row must be a finite, nonzero vector. |
+| `embed_query` | A function that takes a query string and returns a finite, nonzero vector of dimension `D` in the same embedding space. |
+| `applications` | Optional application records with fields such as `id`, `relatedModelItems`, and raw `mdl` declarations. |
+| `capabilities` | Optional capability profiles following the [Capability](recommendation/schemas.py) schema. |
 
-记录可附带 `description` 和 `slot_domain`、`slot_task`、`slot_method`、`slot_input`、`slot_output`、`slot_scale` 标签。读取模型记录并生成向量后，调用 `build_engine()` 在内存中构建索引；嵌入模型的加载和缓存由接入程序管理。
+Records can also include `description` and the labels `slot_domain`, `slot_task`, `slot_method`, `slot_input`, `slot_output`, and `slot_scale`. After loading records and generating vectors, call `build_engine()` to construct the index in memory. The integrating application manages embedding model loading and caching.
 
-能力档案通过 `model_id` 关联模型，可通过 `application_id` 区分具体实现。已核验档案需要提供任务、对象、输入输出及原文证据；证据片段必须属于对应模型描述或应用的 MDL 原文。字段和验证规则见 [schemas.py](recommendation/schemas.py) 与 [catalog.py](recommendation/catalog.py)。
+Capability profiles link to models through `model_id` and can distinguish implementations through `application_id`. Reviewed profiles provide tasks, analysis objects, inputs, outputs, and source evidence. Evidence excerpts must appear in the corresponding model description or application MDL text. See [schemas.py](recommendation/schemas.py) and [catalog.py](recommendation/catalog.py) for fields and validation rules.
 
-`engine.recommend()` 返回：
+`engine.recommend()` returns:
 
-| 字段 | 含义 |
+| Field | Meaning |
 | --- | --- |
-| `items` | 排除明确冲突项后，按请求数量上限返回的候选 |
-| `pool` | 完整召回候选及其不同实现的核对结果 |
-| `diagnostics` | 存在明确冲突的候选与原因 |
-| `candidates` | 参与核对的召回模型数量 |
-| `match_summary` | 本次推荐的文字概述 |
+| `items` | Candidates up to the requested limit, after excluding explicit conflicts. |
+| `pool` | All retrieved candidates and the check results for their implementations. |
+| `diagnostics` | Candidates with explicit conflicts and the reasons for those conflicts. |
+| `candidates` | The number of retrieved models checked. |
+| `match_summary` | A text summary of the recommendation. |
 
-候选的 `match.status` 包含 `suitable`（当前条件适用）、`conditional`（附条件）、`needs_review`（待核验）和 `incompatible`（明确冲突）。其中，`suitable` 表示通过现有能力档案与需求条件的核对。检索分数用于候选排序；模型的实际运行效果需在建模阶段验证。
+Each candidate's `match.status` is `suitable`, `conditional`, `needs_review`, or `incompatible`. `suitable` means the candidate passes the checks against its available capability profile and the request conditions. Retrieval scores rank candidates; actual model performance is evaluated during modeling.
 
-## 需求解析与流程推荐
+## Request parsing and workflow planning
 
-在上面的 `engine` 基础上，可以直接处理自然语言需求：
+Using the `engine` from the example above, process a natural language request with:
 
 ```python
 from recommendation.workflow import run_recommendation
@@ -135,23 +135,22 @@ response = run_recommendation(
 result = response["result"]
 ```
 
-单需求支持本地解析和匹配。`task_mode="auto"` 按解析结果判断是否拆解；`task_mode="workflow"` 显式请求流程规划。生成复杂需求的计划时，通过 `client` 参数传入 AI 客户端。
+Single requests support local parsing and matching. `task_mode="auto"` determines whether to decompose a request from the parsed intent; `task_mode="workflow"` explicitly requests workflow planning. Pass an AI client through `client` to generate plans for complex requests.
 
-[JSONClient](recommendation/backend.py) 接收 `api_key`、`base_url`、`model` 配置，调用支持结构化 JSON 输出的聊天接口。API 密钥通过运行时配置传入。自定义客户端需实现 `request(task, payload, schema)` 方法。
+[JSONClient](recommendation/backend.py) accepts `api_key`, `base_url`, and `model` settings and calls a chat API that supports structured JSON output. Supply API keys through runtime configuration. A custom client must implement `request(task, payload, schema)`.
 
-流程入口返回 `intent`、`is_workflow`、`result` 和 `notices`。生成 RAG 解释时，先按 [rag.py](recommendation/rag.py) 中 `evidence_context()` 的字段要求组织候选响应，再调用 `generate_explanation()`。
+The workflow entry point returns `intent`, `is_workflow`, `result`, and `notices`. To generate a RAG explanation, assemble a candidate response using the fields expected by `evidence_context()` in [rag.py](recommendation/rag.py), then call `generate_explanation()`.
 
-## 源码结构
+## Source structure
 
-| 文件 | 职责 |
+| File | Responsibility |
 | --- | --- |
-| `retrieval.py` | 分词、BM25、余弦检索和 RRF 融合 |
-| `engine.py`、`matching.py` | 候选核对、分组、排序和诊断 |
-| `catalog.py`、`schemas.py` | 模型记录、能力档案、证据与字段验证 |
-| `semantics.py` | 显式中英文术语对应 |
-| `intelligence.py` | 需求解析、检索查询和计划生成 |
-| `coordination.py`、`validation.py` | 逐步骤候选选择、输入输出衔接与条件检查 |
-| `workflow.py` | 需求到推荐结果的统一入口 |
-| `rag.py`、`dialogue.py` | 来源约束解释与追问生成 |
-| `backend.py` | 引擎构建与结构化 AI 客户端 |
-
+| `retrieval.py` | Tokenization, BM25, cosine retrieval, and RRF fusion. |
+| `engine.py`, `matching.py` | Candidate checks, grouping, ranking, and diagnostics. |
+| `catalog.py`, `schemas.py` | Model records, capability profiles, evidence, and field validation. |
+| `semantics.py` | Explicit mappings between Chinese and English terms. |
+| `intelligence.py` | Request parsing, retrieval queries, and plan generation. |
+| `coordination.py`, `validation.py` | Candidate selection per step, I/O connections, and condition checks. |
+| `workflow.py` | The shared entry point from request to recommendation. |
+| `rag.py`, `dialogue.py` | Explanations grounded in sources and clarification questions. |
+| `backend.py` | Engine construction and the structured AI client. |
