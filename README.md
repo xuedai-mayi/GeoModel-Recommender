@@ -1,8 +1,8 @@
 # GeoModel Recommender
 
-面向地理模型的需求驱动推荐引擎。根据研究任务、分析对象、目标输出和已有数据，检索候选模型，并核对功能证据与使用条件。
+GeoModel Recommender 是面向地理模型的需求驱动推荐引擎，结合混合检索与能力证据匹配，根据研究任务、分析对象、目标输出和已有数据推荐模型。
 
-结合混合检索与能力证据匹配，支持单模型推荐、多步骤分析流程规划和带来源引用的推荐解释。
+支持单模型推荐、多步骤分析流程规划和带来源引用的推荐解释。
 
 ## 推荐流程
 
@@ -16,12 +16,12 @@
             候选分组、排序与冲突诊断
 ```
 
-复杂需求可以拆成多个分析步骤，逐步选择模型并检查输入输出衔接。带引用的解释由独立 RAG 模块生成，引用会与候选所属原文核对。
+引擎将复杂需求拆成多个分析步骤，为各步骤选择模型并检查输入输出衔接。RAG 模块生成推荐解释，并核对引用是否来自对应候选的原文。
 
 - 三路检索各取最多 50 个候选，推荐引擎融合召回最多 40 个。
-- 候选优先按证据状态分组，再结合明确模型名、用户偏好和检索分数排序。
-- 功能核对使用任务、对象、输出、输入条件及来源证据；检索相关性与接口声明不自动视为适用性证据。
-- 输出为推荐和流程描述；算法不执行地理模型。
+- 候选先按证据状态分组，再结合需求中明确指定的模型名、用户偏好和检索分数排序。
+- 功能核对依据能力档案中的任务、对象、输出、输入条件及原文证据。检索相关性用于召回，接口声明作为待核验资料。
+- 输出包括候选模型、条件缺口、冲突诊断和分析流程，供后续建模使用。
 
 ## 运行环境
 
@@ -37,7 +37,7 @@ python -m pip install numpy==2.5.4 bm25s==0.3.16 haystack-ai==3.4.1 pydantic==2.
 
 ## 最小调用示例
 
-以下记录与二维向量均为演示构造，只展示接口如何调用。实际检索应使用同一个嵌入模型生成文档向量和查询向量。
+以下示例使用构造的模型记录和二维向量演示调用流程。实际使用时，用同一个嵌入模型生成文档向量和查询向量，并替换示例中的 `embed_query` 函数。
 
 ```python
 from recommendation import Intent, build_engine
@@ -82,7 +82,7 @@ for item in result["items"]:
     print(item["name"], item["match"]["status"])
 ```
 
-示例没有提供已核验能力档案，因此候选为 `needs_review`。记录中的 `tier` 是元数据字段，不代表功能已经核验。
+示例中的候选返回 `needs_review`，表示需要补充已核验能力档案。`tier` 保存模型元数据，功能核验结果见 `match.status`。
 
 ## 输入与结果
 
@@ -100,7 +100,7 @@ build_engine(records, embeddings, embed_query, *, applications=(), capabilities=
 | `applications` | 可选应用记录，包含 `id`、`relatedModelItems` 和原始 `mdl` 声明等字段 |
 | `capabilities` | 可选能力档案，遵循 [Capability](recommendation/schemas.py) 定义 |
 
-记录可附带 `description` 和 `slot_domain`、`slot_task`、`slot_method`、`slot_input`、`slot_output`、`slot_scale` 标签。引擎在内存中构建索引，数据读取、嵌入模型加载和缓存由调用方管理。
+记录可附带 `description` 和 `slot_domain`、`slot_task`、`slot_method`、`slot_input`、`slot_output`、`slot_scale` 标签。读取模型记录并生成向量后，调用 `build_engine()` 在内存中构建索引；嵌入模型的加载和缓存由接入程序管理。
 
 能力档案通过 `model_id` 关联模型，可通过 `application_id` 区分具体实现。已核验档案需要提供任务、对象、输入输出及原文证据；证据片段必须属于对应模型描述或应用的 MDL 原文。字段和验证规则见 [schemas.py](recommendation/schemas.py) 与 [catalog.py](recommendation/catalog.py)。
 
@@ -108,13 +108,13 @@ build_engine(records, embeddings, embed_query, *, applications=(), capabilities=
 
 | 字段 | 含义 |
 | --- | --- |
-| `items` | 按请求数量返回的候选，不含明确冲突项 |
+| `items` | 排除明确冲突项后，按请求数量上限返回的候选 |
 | `pool` | 完整召回候选及其不同实现的核对结果 |
 | `diagnostics` | 存在明确冲突的候选与原因 |
 | `candidates` | 参与核对的召回模型数量 |
 | `match_summary` | 本次推荐的文字概述 |
 
-候选的 `match.status` 包含 `suitable`（当前条件适用）、`conditional`（附条件）、`needs_review`（待核验）和 `incompatible`（明确冲突）。检索分数不是适用概率，`suitable` 表示通过现有档案与条件核对，不代表已实际运行模型。
+候选的 `match.status` 包含 `suitable`（当前条件适用）、`conditional`（附条件）、`needs_review`（待核验）和 `incompatible`（明确冲突）。其中，`suitable` 表示通过现有能力档案与需求条件的核对。检索分数用于候选排序；模型的实际运行效果需在建模阶段验证。
 
 ## 需求解析与流程推荐
 
@@ -133,11 +133,11 @@ response = run_recommendation(
 result = response["result"]
 ```
 
-单需求支持本地解析和匹配。`task_mode="auto"` 按解析结果判断是否拆解；`task_mode="workflow"` 显式请求流程规划。复杂需求的计划生成需要调用方提供 AI 客户端。
+单需求支持本地解析和匹配。`task_mode="auto"` 按解析结果判断是否拆解；`task_mode="workflow"` 显式请求流程规划。生成复杂需求的计划时，通过 `client` 参数传入 AI 客户端。
 
-[JSONClient](recommendation/backend.py) 接收 `api_key`、`base_url`、`model` 配置，调用支持结构化 JSON 输出的聊天接口。密钥由调用方管理，不应写入源码。也可以传入实现 `request(task, payload, schema)` 方法的客户端。
+[JSONClient](recommendation/backend.py) 接收 `api_key`、`base_url`、`model` 配置，调用支持结构化 JSON 输出的聊天接口。API 密钥通过运行时配置传入。自定义客户端需实现 `request(task, payload, schema)` 方法。
 
-流程入口返回 `intent`、`is_workflow`、`result` 和 `notices`。RAG 解释通过 [rag.py](recommendation/rag.py) 的 `generate_explanation()` 单独调用；该函数需要符合其 `evidence_context()` 定义的候选响应结构，并非直接接收整个流程入口返回值。
+流程入口返回 `intent`、`is_workflow`、`result` 和 `notices`。生成 RAG 解释时，先按 [rag.py](recommendation/rag.py) 中 `evidence_context()` 的字段要求组织候选响应，再调用 `generate_explanation()`。
 
 ## 源码结构
 
